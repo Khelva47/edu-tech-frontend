@@ -1,4 +1,4 @@
-import Image from "next/image";"use client"
+"use client"
 
 import { useState, useEffect } from "react"
 import { Search, Users, TrendingUp, BookOpen, Eye } from "lucide-react"
