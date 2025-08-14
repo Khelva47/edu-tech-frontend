@@ -5,63 +5,45 @@ export async function GET() {
   try {
     const query = `
       SELECT 
-        student_id as id,
-        CONCAT(first_name, ' ', last_name) as name,
-        DATE_FORMAT(created_at, '%Y-%m-%d') as registrationDate,
+        id,
+        student_id,
+        first_name,
+        last_name,
+        email,
+        phone,
+        emergency_contact,
+        emergency_phone,
+        medical_notes,
+        learning_goals,
+        date_of_birth,
+        created_at,
+        updated_at,
         CASE 
           WHEN (SELECT AVG(assessment_score) FROM learning_sessions WHERE student_id = students.student_id) >= 90 THEN 'excellent'
           WHEN (SELECT AVG(assessment_score) FROM learning_sessions WHERE student_id = students.student_id) >= 70 THEN 'active'
           ELSE 'needs_attention'
         END as status,
-        (SELECT COUNT(*) FROM learning_sessions WHERE student_id = students.student_id) as totalSessions,
-        COALESCE((SELECT AVG(assessment_score) FROM learning_sessions WHERE student_id = students.student_id), 0) as averageScore,
-        (SELECT MAX(session_date) FROM learning_sessions WHERE student_id = students.student_id) as lastSession
+        (SELECT COUNT(*) FROM learning_sessions WHERE student_id = students.student_id) as total_sessions,
+        COALESCE((SELECT AVG(assessment_score) FROM learning_sessions WHERE student_id = students.student_id), 0) as average_score,
+        (SELECT MAX(session_date) FROM learning_sessions WHERE student_id = students.student_id) as last_session_date
       FROM students
       ORDER BY created_at DESC
     `
 
     const students = await executeQuerySafe(query)
 
-    // Get shapes progress for each student
-    const studentsWithProgress = await Promise.all(
-      students.map(async (student) => {
-        const shapesQuery = `
-          SELECT 
-            shape_type,
-            AVG(assessment_score) as progress
-          FROM learning_sessions 
-          WHERE student_id = ? 
-          GROUP BY shape_type
-        `
-        const shapesData = await executeQuerySafe(shapesQuery, [student.id])
-
-        const shapesProgress = {
-          circle: 0,
-          square: 0,
-          triangle: 0,
-          rectangle: 0,
-        }
-
-        shapesData.forEach((shape) => {
-          shapesProgress[shape.shape_type.toLowerCase()] = Math.round(shape.progress)
-        })
-
-        return {
-          ...student,
-          averageScore: Math.round(student.averageScore),
-          shapesProgress,
-        }
-      }),
-    )
-
     return NextResponse.json({
       success: true,
-      data: studentsWithProgress,
-      total: studentsWithProgress.length,
+      students: students.map((student) => ({
+        ...student,
+        average_score: Math.round(student.average_score || 0),
+        total_sessions: student.total_sessions || 0,
+      })),
+      total: students.length,
     })
   } catch (error) {
     console.error("Database error:", error)
-    return NextResponse.json({ success: false, error: "Failed to fetch students" }, { status: 500 })
+    return NextResponse.json({ success: false, error: "Failed to fetch students", students: [] }, { status: 500 })
   }
 }
 
@@ -120,24 +102,22 @@ export async function POST(request) {
     // Return the created student
     const newStudent = {
       id: studentId,
-      name: `${firstName} ${lastName}`,
-      registrationDate: new Date().toISOString().split("T")[0],
+      student_id: studentId,
+      first_name: firstName,
+      last_name: lastName,
+      email: body.email || null,
+      phone: body.phone || null,
+      created_at: new Date().toISOString(),
       status: "active",
-      totalSessions: 0,
-      averageScore: 0,
-      lastSession: null,
-      shapesProgress: {
-        circle: 0,
-        square: 0,
-        triangle: 0,
-        rectangle: 0,
-      },
+      total_sessions: 0,
+      average_score: 0,
+      last_session_date: null,
     }
 
     return NextResponse.json(
       {
         success: true,
-        data: newStudent,
+        student: newStudent,
       },
       { status: 201 },
     )

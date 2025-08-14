@@ -6,65 +6,7 @@ import { ArrowLeft, Calendar, TrendingUp, BookOpen, Award, Clock, Play, CheckCir
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
 import Link from "next/link"
-
-// Mock student data - replace with API call
-const getStudentData = (id) => {
-  const students = {
-    STU001: {
-      id: "STU001",
-      name: "Emma Johnson",
-      registrationDate: "2024-01-15",
-      status: "excellent",
-      totalSessions: 45,
-      averageScore: 92,
-      lastSession: "2024-01-20",
-      shapesProgress: {
-        circle: { progress: 95, sessions: 12, accuracy: 94 },
-        square: { progress: 88, sessions: 11, accuracy: 89 },
-        triangle: { progress: 90, sessions: 12, accuracy: 91 },
-        rectangle: { progress: 85, sessions: 10, accuracy: 87 },
-      },
-      recentSessions: [
-        {
-          id: "SES001",
-          date: "2024-01-20",
-          shape: "circle",
-          questionsAsked: 5,
-          correctAnswers: 5,
-          accuracy: 100,
-          duration: "8 minutes",
-        },
-        {
-          id: "SES002",
-          date: "2024-01-19",
-          shape: "triangle",
-          questionsAsked: 4,
-          correctAnswers: 3,
-          accuracy: 75,
-          duration: "6 minutes",
-        },
-        {
-          id: "SES003",
-          date: "2024-01-18",
-          shape: "square",
-          questionsAsked: 6,
-          correctAnswers: 5,
-          accuracy: 83,
-          duration: "10 minutes",
-        },
-      ],
-      weeklyProgress: [
-        { week: "Week 1", score: 85 },
-        { week: "Week 2", score: 88 },
-        { week: "Week 3", score: 90 },
-        { week: "Week 4", score: 92 },
-      ],
-    },
-  }
-  return students[id] || null
-}
 
 const getStatusColor = (status) => {
   switch (status) {
@@ -92,7 +34,9 @@ const getShapeIcon = (shape) => {
 export default function StudentDetail() {
   const params = useParams()
   const [student, setStudent] = useState(null)
+  const [sessions, setSessions] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [assessmentStatus, setAssessmentStatus] = useState({
     assessedToday: false,
     currentSession: null,
@@ -100,15 +44,30 @@ export default function StudentDetail() {
   })
 
   useEffect(() => {
-    // Simulate API call
-    setTimeout(() => {
-      const studentData = getStudentData(params.id)
-      setStudent(studentData)
-      setLoading(false)
-    }, 500)
-
-    checkAssessmentStatus()
+    if (params.id) {
+      fetchStudentData()
+      checkAssessmentStatus()
+    }
   }, [params.id])
+
+  const fetchStudentData = async () => {
+    try {
+      setLoading(true)
+      const response = await fetch(`/api/students/${params.id}`)
+      if (!response.ok) {
+        throw new Error("Student not found")
+      }
+      const data = await response.json()
+      setStudent(data.student)
+      setSessions(data.sessions || [])
+      setError(null)
+    } catch (err) {
+      console.error("Error fetching student:", err)
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const checkAssessmentStatus = async () => {
     try {
@@ -171,12 +130,12 @@ export default function StudentDetail() {
     )
   }
 
-  if (!student) {
+  if (error || !student) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-slate-800 mb-2">Student Not Found</h1>
-          <p className="text-slate-600 mb-4">The student with ID {params.id} could not be found.</p>
+          <p className="text-slate-600 mb-4">{error || `The student with ID ${params.id} could not be found.`}</p>
           <Button asChild>
             <Link href="/">Return to Dashboard</Link>
           </Button>
@@ -199,14 +158,16 @@ export default function StudentDetail() {
 
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-4xl font-bold text-slate-800 mb-2">{student.name}</h1>
+              <h1 className="text-4xl font-bold text-slate-800 mb-2">
+                {student.first_name} {student.last_name}
+              </h1>
               <p className="text-slate-600 text-lg">
-                Student ID: {student.id} • Registered: {new Date(student.registrationDate).toLocaleDateString()}
+                Student ID: {student.student_id} • Registered: {new Date(student.created_at).toLocaleDateString()}
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <Badge className={getStatusColor(student.status)} size="lg">
-                {student.status.replace("_", " ").toUpperCase()}
+              <Badge className={getStatusColor(student.status || "active")} size="lg">
+                {(student.status || "active").replace("_", " ").toUpperCase()}
               </Badge>
               {assessmentStatus.currentSession ? (
                 <Badge className="bg-green-100 text-green-800" size="lg">
@@ -244,7 +205,7 @@ export default function StudentDetail() {
               <BookOpen className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-slate-800">{student.totalSessions}</div>
+              <div className="text-2xl font-bold text-slate-800">{student.total_sessions || 0}</div>
               <p className="text-xs text-slate-500">Learning interactions</p>
             </CardContent>
           </Card>
@@ -255,7 +216,7 @@ export default function StudentDetail() {
               <TrendingUp className="h-4 w-4 text-green-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-slate-800">{student.averageScore}%</div>
+              <div className="text-2xl font-bold text-slate-800">{student.average_score || 0}%</div>
               <p className="text-xs text-slate-500">Overall performance</p>
             </CardContent>
           </Card>
@@ -267,7 +228,9 @@ export default function StudentDetail() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-slate-800">
-                {new Date(student.lastSession).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                {student.last_session_date
+                  ? new Date(student.last_session_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                  : "None"}
               </div>
               <p className="text-xs text-slate-500">Most recent activity</p>
             </CardContent>
@@ -275,42 +238,44 @@ export default function StudentDetail() {
 
           <Card className="bg-white shadow-sm border-0">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-slate-600">Best Shape</CardTitle>
+              <CardTitle className="text-sm font-medium text-slate-600">Contact</CardTitle>
               <Award className="h-4 w-4 text-amber-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-slate-800">
-                {Object.entries(student.shapesProgress).reduce((a, b) => (a[1].progress > b[1].progress ? a : b))[0]}
-              </div>
-              <p className="text-xs text-slate-500">Highest accuracy</p>
+              <div className="text-sm font-bold text-slate-800">{student.email || "No email"}</div>
+              <p className="text-xs text-slate-500">{student.phone || "No phone"}</p>
             </CardContent>
           </Card>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Shape Progress */}
+          {/* Student Information */}
           <Card className="bg-white shadow-sm border-0">
             <CardHeader>
-              <CardTitle className="text-xl font-semibold text-slate-800">Shape Learning Progress</CardTitle>
-              <CardDescription>Individual progress for each tactile shape</CardDescription>
+              <CardTitle className="text-xl font-semibold text-slate-800">Student Information</CardTitle>
+              <CardDescription>Personal and contact details</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              {Object.entries(student.shapesProgress).map(([shape, data]) => (
-                <div key={shape} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">{getShapeIcon(shape)}</span>
-                      <span className="font-medium capitalize text-slate-700">{shape}</span>
-                    </div>
-                    <span className="text-sm font-medium text-slate-600">{data.progress}%</span>
-                  </div>
-                  <Progress value={data.progress} className="h-2" />
-                  <div className="flex justify-between text-xs text-slate-500">
-                    <span>{data.sessions} sessions</span>
-                    <span>{data.accuracy}% accuracy</span>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-slate-600">Date of Birth</label>
+                  <div className="text-slate-800">
+                    {student.date_of_birth ? new Date(student.date_of_birth).toLocaleDateString() : "Not provided"}
                   </div>
                 </div>
-              ))}
+                <div>
+                  <label className="text-sm font-medium text-slate-600">Emergency Contact</label>
+                  <div className="text-slate-800">{student.emergency_contact || "Not provided"}</div>
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-600">Medical Notes</label>
+                <div className="text-slate-800">{student.medical_notes || "None"}</div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-600">Learning Goals</label>
+                <div className="text-slate-800">{student.learning_goals || "Not specified"}</div>
+              </div>
             </CardContent>
           </Card>
 
@@ -323,36 +288,37 @@ export default function StudentDetail() {
                   <CardDescription>Latest learning interactions</CardDescription>
                 </div>
                 <Button asChild variant="outline" size="sm">
-                  <Link href={`/student/${student.id}/sessions`}>View All</Link>
+                  <Link href={`/student/${student.student_id}/sessions`}>View All</Link>
                 </Button>
               </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {student.recentSessions.map((session) => (
+                {sessions.slice(0, 3).map((session) => (
                   <div key={session.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                        <span className="text-blue-600 text-sm">{getShapeIcon(session.shape)}</span>
+                        <span className="text-blue-600 text-sm">{getShapeIcon(session.shape_type)}</span>
                       </div>
                       <div>
-                        <div className="font-medium text-slate-800 capitalize">{session.shape}</div>
+                        <div className="font-medium text-slate-800 capitalize">{session.shape_type || "Unknown"}</div>
                         <div className="text-xs text-slate-500 flex items-center gap-2">
                           <Calendar className="h-3 w-3" />
-                          {new Date(session.date).toLocaleDateString()}
+                          {new Date(session.session_date).toLocaleDateString()}
                           <Clock className="h-3 w-3 ml-1" />
-                          {session.duration}
+                          {session.duration || "N/A"}
                         </div>
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="font-medium text-slate-800">{session.accuracy}%</div>
-                      <div className="text-xs text-slate-500">
-                        {session.correctAnswers}/{session.questionsAsked} correct
-                      </div>
+                      <div className="font-medium text-slate-800">{session.assessment_score || 0}%</div>
+                      <div className="text-xs text-slate-500">Score</div>
                     </div>
                   </div>
                 ))}
+                {sessions.length === 0 && (
+                  <div className="text-center py-4 text-slate-500">No sessions recorded yet</div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -361,7 +327,7 @@ export default function StudentDetail() {
         {/* Action Buttons */}
         <div className="mt-8 flex gap-4">
           <Button asChild size="lg">
-            <Link href={`/student/${student.id}/sessions`}>View All Sessions</Link>
+            <Link href={`/student/${student.student_id}/sessions`}>View All Sessions</Link>
           </Button>
           <Button variant="outline" size="lg">
             Generate Report
