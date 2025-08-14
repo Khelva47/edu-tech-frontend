@@ -1,27 +1,5 @@
 import { NextResponse } from "next/server"
-
-// Mock session data - replace with database queries
-const mockSessions = [
-  {
-    id: "SES001",
-    studentId: "STU001",
-    date: "2024-01-20T10:30:00Z",
-    shape: "circle",
-    questionsAsked: 5,
-    correctAnswers: 5,
-    accuracy: 100,
-    duration: 480, // seconds
-    questions: [
-      {
-        question: "What shape is this?",
-        studentAnswer: "circle",
-        correctAnswer: "circle",
-        isCorrect: true,
-        aiAssessment: "Perfect identification",
-      },
-    ],
-  },
-]
+import { executeQuerySafe } from "@/lib/db"
 
 export async function GET(request) {
   try {
@@ -30,24 +8,61 @@ export async function GET(request) {
     const shape = searchParams.get("shape")
     const limit = Number.parseInt(searchParams.get("limit")) || 50
 
-    let filteredSessions = mockSessions
+    let query = `
+      SELECT 
+        ls.id,
+        ls.student_id,
+        ls.shape,
+        ls.explanation,
+        ls.timestamp,
+        s.first_name,
+        s.last_name,
+        COUNT(ass.id) as total_questions,
+        SUM(CASE WHEN ass.assessment = 'Correct' THEN 1 ELSE 0 END) as correct_answers
+      FROM learning_sessions ls
+      LEFT JOIN students s ON ls.student_id = s.student_id
+      LEFT JOIN assessment_sessions ass ON ls.student_id = ass.student_id 
+        AND DATE(ls.timestamp) = DATE(ass.timestamp)
+      WHERE 1=1
+    `
+
+    const params = []
 
     if (studentId) {
-      filteredSessions = filteredSessions.filter((s) => s.studentId === studentId)
+      query += " AND ls.student_id = ?"
+      params.push(studentId)
     }
 
     if (shape) {
-      filteredSessions = filteredSessions.filter((s) => s.shape === shape)
+      query += " AND ls.shape = ?"
+      params.push(shape)
     }
 
-    filteredSessions = filteredSessions.slice(0, limit)
+    query += " GROUP BY ls.id ORDER BY ls.timestamp DESC LIMIT ?"
+    params.push(limit)
+
+    const sessions = await executeQuerySafe(query, params)
+
+    // Format sessions to match expected structure
+    const formattedSessions = sessions.map((session) => ({
+      id: session.id,
+      studentId: session.student_id,
+      studentName: `${session.first_name} ${session.last_name}`,
+      date: session.timestamp,
+      shape: session.shape,
+      explanation: session.explanation,
+      questionsAsked: session.total_questions || 0,
+      correctAnswers: session.correct_answers || 0,
+      accuracy: session.total_questions > 0 ? Math.round((session.correct_answers / session.total_questions) * 100) : 0,
+    }))
 
     return NextResponse.json({
       success: true,
-      data: filteredSessions,
-      total: filteredSessions.length,
+      data: formattedSessions,
+      total: formattedSessions.length,
     })
   } catch (error) {
+    console.error("Error fetching sessions:", error)
     return NextResponse.json({ success: false, error: "Failed to fetch sessions" }, { status: 500 })
   }
 }
@@ -55,36 +70,33 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const body = await request.json()
+    const { studentId, shape, explanation } = body
 
-    // Validate required fields
-    const { studentId, shape, questionsAsked, correctAnswers } = body
-    if (!studentId || !shape || questionsAsked === undefined || correctAnswers === undefined) {
+    if (!studentId || !shape || !explanation) {
       return NextResponse.json({ success: false, error: "Missing required session data" }, { status: 400 })
     }
 
-    // Create new session (mock implementation)
-    const newSession = {
-      id: `SES${String(mockSessions.length + 1).padStart(3, "0")}`,
-      studentId,
-      date: new Date().toISOString(),
-      shape,
-      questionsAsked,
-      correctAnswers,
-      accuracy: Math.round((correctAnswers / questionsAsked) * 100),
-      duration: body.duration || 0,
-      questions: body.questions || [],
-    }
-
-    mockSessions.push(newSession)
+    // Insert learning session
+    const result = await executeQuerySafe(
+      "INSERT INTO learning_sessions (student_id, shape, explanation) VALUES (?, ?, ?)",
+      [studentId, shape, explanation],
+    )
 
     return NextResponse.json(
       {
         success: true,
-        data: newSession,
+        data: {
+          id: result.insertId,
+          studentId,
+          shape,
+          explanation,
+          timestamp: new Date().toISOString(),
+        },
       },
       { status: 201 },
     )
   } catch (error) {
+    console.error("Error creating session:", error)
     return NextResponse.json({ success: false, error: "Failed to create session" }, { status: 500 })
   }
 }

@@ -34,7 +34,7 @@ export async function executeQuery(query, params = []) {
   }
 }
 
-// Initialize database tables
+// Initialize database tables to match Python script exactly
 export async function initializeDatabase() {
   const createStudentsTable = `
     CREATE TABLE IF NOT EXISTS students (
@@ -54,38 +54,34 @@ export async function initializeDatabase() {
     )
   `
 
-  const createSessionsTable = `
+  // Match Python script schema exactly
+  const createLearningSessionsTable = `
     CREATE TABLE IF NOT EXISTS learning_sessions (
       id INT AUTO_INCREMENT PRIMARY KEY,
-      student_id VARCHAR(20) NOT NULL,
-      shape_type ENUM('CIRCLE', 'SQUARE', 'TRIANGLE', 'RECTANGLE') NOT NULL,
-      question TEXT NOT NULL,
-      student_answer TEXT,
-      correct_answer TEXT,
-      is_correct BOOLEAN,
-      assessment_score INT,
-      session_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      student_id TEXT,
+      shape TEXT,
+      explanation TEXT,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
     )
   `
 
+  // Match Python script schema exactly
   const createAssessmentSessionsTable = `
     CREATE TABLE IF NOT EXISTS assessment_sessions (
       id INT AUTO_INCREMENT PRIMARY KEY,
-      student_id VARCHAR(20) NOT NULL,
-      start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      end_time TIMESTAMP NULL,
-      status ENUM('active', 'completed', 'cancelled') DEFAULT 'active',
-      total_questions INT DEFAULT 0,
-      correct_answers INT DEFAULT 0,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      student_id TEXT,
+      question TEXT,
+      answer TEXT,
+      assessment TEXT,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
     )
   `
 
   try {
     await executeQuery(createStudentsTable)
-    await executeQuery(createSessionsTable)
+    await executeQuery(createLearningSessionsTable)
     await executeQuery(createAssessmentSessionsTable)
     console.log("Database tables initialized successfully")
   } catch (error) {

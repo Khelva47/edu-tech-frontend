@@ -8,91 +8,89 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 
-// Mock session data
-const mockSessionData = {
-  STU001: {
-    name: "Emma Johnson",
-    sessions: [
-      {
-        id: "SES001",
-        date: "2024-01-20",
-        shape: "circle",
-        duration: "12 minutes",
-        score: 95,
-        questions: [
-          {
-            question: "What shape is this?",
-            studentAnswer: "Circle",
-            correctAnswer: "Circle",
-            isCorrect: true,
-            aiAssessment: "Perfect identification",
-          },
-          {
-            question: "How many sides does this shape have?",
-            studentAnswer: "Zero sides, it's round",
-            correctAnswer: "Zero sides or no sides",
-            isCorrect: true,
-            aiAssessment: "Excellent understanding of circular properties",
-          },
-        ],
-      },
-      {
-        id: "SES002",
-        date: "2024-01-19",
-        shape: "square",
-        duration: "15 minutes",
-        score: 88,
-        questions: [
-          {
-            question: "What shape is this?",
-            studentAnswer: "Square",
-            correctAnswer: "Square",
-            isCorrect: true,
-            aiAssessment: "Correct identification",
-          },
-          {
-            question: "How many corners does this shape have?",
-            studentAnswer: "Four corners",
-            correctAnswer: "Four corners",
-            isCorrect: true,
-            aiAssessment: "Good understanding",
-          },
-          {
-            question: "Are all sides equal?",
-            studentAnswer: "Yes, they are the same",
-            correctAnswer: "Yes, all sides are equal",
-            isCorrect: true,
-            aiAssessment: "Demonstrates understanding of square properties",
-          },
-          {
-            question: "What makes this different from a rectangle?",
-            studentAnswer: "It's smaller",
-            correctAnswer: "All sides are equal length",
-            isCorrect: false,
-            aiAssessment: "Needs clarification on square vs rectangle differences",
-          },
-        ],
-      },
-    ],
-  },
-}
-
 export default function StudentSessionsPage() {
   const params = useParams()
   const studentId = params.id
   const [sessionData, setSessionData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
-    // Mock API call
-    const data = mockSessionData[studentId]
-    setSessionData(data)
+    fetchSessionData()
   }, [studentId])
 
-  if (!sessionData) {
+  const fetchSessionData = async () => {
+    try {
+      setLoading(true)
+
+      // Fetch student info
+      const studentResponse = await fetch(`/api/students/${studentId}`)
+      if (!studentResponse.ok) {
+        throw new Error("Student not found")
+      }
+      const studentData = await studentResponse.json()
+
+      // Fetch learning sessions
+      const sessionsResponse = await fetch(`/api/sessions?studentId=${studentId}`)
+      const sessionsData = await sessionsResponse.json()
+
+      // Fetch assessment sessions for each learning session
+      const sessionsWithAssessments = await Promise.all(
+        sessionsData.data.map(async (session) => {
+          try {
+            const assessmentResponse = await fetch(
+              `/api/assessment/sessions?studentId=${studentId}&date=${session.date.split("T")[0]}`,
+            )
+            const assessmentData = await assessmentResponse.json()
+
+            return {
+              ...session,
+              questions: assessmentData.success ? assessmentData.data : [],
+              score: session.accuracy,
+              duration: "N/A", // Duration not tracked in Python script
+            }
+          } catch (err) {
+            console.error("Error fetching assessments:", err)
+            return {
+              ...session,
+              questions: [],
+              score: 0,
+              duration: "N/A",
+            }
+          }
+        }),
+      )
+
+      setSessionData({
+        name: `${studentData.student.first_name} ${studentData.student.last_name}`,
+        sessions: sessionsWithAssessments,
+      })
+      setError(null)
+    } catch (err) {
+      console.error("Error fetching session data:", err)
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading sessions...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error || !sessionData) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
         <div className="text-center">
           <div className="text-2xl font-semibold text-slate-800 mb-2">Sessions not found</div>
+          <p className="text-slate-600 mb-4">{error}</p>
           <Link href="/">
             <Button variant="outline">Back to Dashboard</Button>
           </Link>
@@ -133,7 +131,7 @@ export default function StudentSessionsPage() {
                       </span>
                       <span className="flex items-center gap-1">
                         <Clock className="h-4 w-4" />
-                        {session.duration}
+                        {new Date(session.date).toLocaleTimeString()}
                       </span>
                     </CardDescription>
                   </div>
@@ -147,43 +145,46 @@ export default function StudentSessionsPage() {
                     <span>AI Voice Interaction Session</span>
                   </div>
 
-                  {/* Questions and Answers */}
-                  <div className="space-y-4">
-                    <h3 className="font-semibold text-slate-800">Questions & Responses</h3>
-                    {session.questions.map((qa, index) => (
-                      <div key={index} className="border border-slate-200 rounded-lg p-4">
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex-1">
-                            <h4 className="font-medium text-slate-800 mb-2">
-                              Question {index + 1}: {qa.question}
-                            </h4>
-                          </div>
-                          {qa.isCorrect ? (
-                            <CheckCircle className="h-5 w-5 text-green-600 mt-1" />
-                          ) : (
-                            <XCircle className="h-5 w-5 text-red-600 mt-1" />
-                          )}
-                        </div>
-
-                        <div className="space-y-3">
-                          <div className="bg-blue-50 p-3 rounded">
-                            <div className="text-sm font-medium text-blue-800 mb-1">Student Answer:</div>
-                            <div className="text-blue-700">"{qa.studentAnswer}"</div>
-                          </div>
-
-                          <div className="bg-green-50 p-3 rounded">
-                            <div className="text-sm font-medium text-green-800 mb-1">Expected Answer:</div>
-                            <div className="text-green-700">"{qa.correctAnswer}"</div>
-                          </div>
-
-                          <div className="bg-amber-50 p-3 rounded">
-                            <div className="text-sm font-medium text-amber-800 mb-1">AI Assessment:</div>
-                            <div className="text-amber-700">{qa.aiAssessment}</div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                  {/* AI Explanation */}
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <h3 className="font-semibold text-blue-800 mb-2">AI Explanation Given:</h3>
+                    <p className="text-blue-700">{session.explanation}</p>
                   </div>
+
+                  {/* Questions and Answers */}
+                  {session.questions.length > 0 && (
+                    <div className="space-y-4">
+                      <h3 className="font-semibold text-slate-800">Comprehension Questions & Responses</h3>
+                      {session.questions.map((qa, index) => (
+                        <div key={index} className="border border-slate-200 rounded-lg p-4">
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex-1">
+                              <h4 className="font-medium text-slate-800 mb-2">
+                                Question {index + 1}: {qa.question}
+                              </h4>
+                            </div>
+                            {qa.assessment === "Correct" ? (
+                              <CheckCircle className="h-5 w-5 text-green-600 mt-1" />
+                            ) : (
+                              <XCircle className="h-5 w-5 text-red-600 mt-1" />
+                            )}
+                          </div>
+
+                          <div className="space-y-3">
+                            <div className="bg-blue-50 p-3 rounded">
+                              <div className="text-sm font-medium text-blue-800 mb-1">Student Answer:</div>
+                              <div className="text-blue-700">"{qa.answer}"</div>
+                            </div>
+
+                            <div className="bg-amber-50 p-3 rounded">
+                              <div className="text-sm font-medium text-amber-800 mb-1">AI Assessment:</div>
+                              <div className="text-amber-700">{qa.assessment}</div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {/* Session Summary */}
                   <div className="bg-slate-50 p-4 rounded-lg">
@@ -196,13 +197,13 @@ export default function StudentSessionsPage() {
                       <div>
                         <span className="text-slate-600">Correct Answers:</span>
                         <span className="font-medium text-green-600 ml-2">
-                          {session.questions.filter((q) => q.isCorrect).length}
+                          {session.questions.filter((q) => q.assessment === "Correct").length}
                         </span>
                       </div>
                       <div>
                         <span className="text-slate-600">Incorrect Answers:</span>
                         <span className="font-medium text-red-600 ml-2">
-                          {session.questions.filter((q) => !q.isCorrect).length}
+                          {session.questions.filter((q) => q.assessment !== "Correct").length}
                         </span>
                       </div>
                     </div>
@@ -216,6 +217,9 @@ export default function StudentSessionsPage() {
         {sessionData.sessions.length === 0 && (
           <div className="text-center py-12">
             <div className="text-slate-400 text-lg">No sessions found for this student.</div>
+            <p className="text-slate-500 mt-2">
+              Sessions will appear here after the student interacts with the tactile board.
+            </p>
           </div>
         )}
       </div>
