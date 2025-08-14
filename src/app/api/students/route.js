@@ -5,11 +5,11 @@ const mockStudents = [
   {
     id: "STU001",
     name: "Emma Johnson",
-    registrationDate: "2024-01-15",
+    registrationDate: "2025-08-03",
     status: "excellent",
     totalSessions: 45,
     averageScore: 92,
-    lastSession: "2024-01-20",
+    lastSession: "2025-08-11",
     shapesProgress: {
       circle: 95,
       square: 88,
@@ -20,11 +20,11 @@ const mockStudents = [
   {
     id: "STU002",
     name: "Michael Chen",
-    registrationDate: "2024-01-10",
+    registrationDate: "2025-08-03",
     status: "active",
     totalSessions: 32,
     averageScore: 78,
-    lastSession: "2024-01-19",
+    lastSession: "2025-08-11",
     shapesProgress: {
       circle: 82,
       square: 75,
