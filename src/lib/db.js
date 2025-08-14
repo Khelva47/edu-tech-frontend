@@ -69,9 +69,24 @@ export async function initializeDatabase() {
     )
   `
 
+  const createAssessmentSessionsTable = `
+    CREATE TABLE IF NOT EXISTS assessment_sessions (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      student_id VARCHAR(20) NOT NULL,
+      start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      end_time TIMESTAMP NULL,
+      status ENUM('active', 'completed', 'cancelled') DEFAULT 'active',
+      total_questions INT DEFAULT 0,
+      correct_answers INT DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
+    )
+  `
+
   try {
     await executeQuery(createStudentsTable)
     await executeQuery(createSessionsTable)
+    await executeQuery(createAssessmentSessionsTable)
     console.log("Database tables initialized successfully")
   } catch (error) {
     console.error("Error initializing database:", error)
@@ -94,21 +109,27 @@ export async function checkTablesExist() {
       [process.env.MYSQL_DATABASE],
     )
 
+    const [assessmentTable] = await connection.execute(
+      "SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = ? AND table_name = 'assessment_sessions'",
+      [process.env.MYSQL_DATABASE],
+    )
+
     return {
       studentsExists: studentsTable[0].count > 0,
       sessionsExists: sessionsTable[0].count > 0,
+      assessmentExists: assessmentTable[0].count > 0,
     }
   } catch (error) {
     console.error("Error checking table existence:", error)
-    return { studentsExists: false, sessionsExists: false }
+    return { studentsExists: false, sessionsExists: false, assessmentExists: false }
   }
 }
 
 export async function ensureTablesExist() {
   try {
-    const { studentsExists, sessionsExists } = await checkTablesExist()
+    const { studentsExists, sessionsExists, assessmentExists } = await checkTablesExist()
 
-    if (!studentsExists || !sessionsExists) {
+    if (!studentsExists || !sessionsExists || !assessmentExists) {
       console.log("Tables missing, initializing database...")
       await initializeDatabase()
       return true

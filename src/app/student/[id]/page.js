@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
-import { ArrowLeft, Calendar, TrendingUp, BookOpen, Award, Clock } from "lucide-react"
+import { ArrowLeft, Calendar, TrendingUp, BookOpen, Award, Clock, Play, CheckCircle } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -93,6 +93,11 @@ export default function StudentDetail() {
   const params = useParams()
   const [student, setStudent] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [assessmentStatus, setAssessmentStatus] = useState({
+    assessedToday: false,
+    currentSession: null,
+    loading: false,
+  })
 
   useEffect(() => {
     // Simulate API call
@@ -101,7 +106,59 @@ export default function StudentDetail() {
       setStudent(studentData)
       setLoading(false)
     }, 500)
+
+    checkAssessmentStatus()
   }, [params.id])
+
+  const checkAssessmentStatus = async () => {
+    try {
+      const response = await fetch(`/api/assessment/status/${params.id}`)
+      const data = await response.json()
+      setAssessmentStatus((prev) => ({
+        ...prev,
+        assessedToday: data.assessedToday,
+        currentSession: data.currentSession,
+      }))
+    } catch (error) {
+      console.error("Error checking assessment status:", error)
+    }
+  }
+
+  const startAssessment = async () => {
+    setAssessmentStatus((prev) => ({ ...prev, loading: true }))
+
+    try {
+      const response = await fetch("/api/assessment/start", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ studentId: params.id }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        setAssessmentStatus((prev) => ({
+          ...prev,
+          currentSession: {
+            id: data.sessionId,
+            startTime: data.startTime,
+            status: data.status,
+          },
+          loading: false,
+        }))
+        alert("Assessment session started! The tactile board is now ready for this student.")
+      } else {
+        alert(data.error || "Failed to start assessment")
+        setAssessmentStatus((prev) => ({ ...prev, loading: false }))
+      }
+    } catch (error) {
+      console.error("Error starting assessment:", error)
+      alert("Failed to start assessment session")
+      setAssessmentStatus((prev) => ({ ...prev, loading: false }))
+    }
+  }
 
   if (loading) {
     return (
@@ -120,7 +177,7 @@ export default function StudentDetail() {
         <div className="text-center">
           <h1 className="text-2xl font-bold text-slate-800 mb-2">Student Not Found</h1>
           <p className="text-slate-600 mb-4">The student with ID {params.id} could not be found.</p>
-          <Button aschild>
+          <Button asChild>
             <Link href="/">Return to Dashboard</Link>
           </Button>
         </div>
@@ -133,7 +190,7 @@ export default function StudentDetail() {
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <Button variant="ghost" aschild className="mb-4">
+          <Button variant="ghost" asChild className="mb-4">
             <Link href="/" className="flex items-center gap-2">
               <ArrowLeft className="h-4 w-4" />
               Back to Dashboard
@@ -147,9 +204,35 @@ export default function StudentDetail() {
                 Student ID: {student.id} • Registered: {new Date(student.registrationDate).toLocaleDateString()}
               </p>
             </div>
-            <Badge className={getStatusColor(student.status)} size="lg">
-              {student.status.replace("_", " ").toUpperCase()}
-            </Badge>
+            <div className="flex items-center gap-3">
+              <Badge className={getStatusColor(student.status)} size="lg">
+                {student.status.replace("_", " ").toUpperCase()}
+              </Badge>
+              {assessmentStatus.currentSession ? (
+                <Badge className="bg-green-100 text-green-800" size="lg">
+                  <CheckCircle className="h-4 w-4 mr-1" />
+                  Assessment Active
+                </Badge>
+              ) : assessmentStatus.assessedToday ? (
+                <Badge className="bg-gray-100 text-gray-800" size="lg">
+                  <CheckCircle className="h-4 w-4 mr-1" />
+                  Assessed Today
+                </Badge>
+              ) : (
+                <Button
+                  onClick={startAssessment}
+                  disabled={assessmentStatus.loading}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {assessmentStatus.loading ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  ) : (
+                    <Play className="h-4 w-4 mr-2" />
+                  )}
+                  Start Assessment
+                </Button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -239,7 +322,7 @@ export default function StudentDetail() {
                   <CardTitle className="text-xl font-semibold text-slate-800">Recent Sessions</CardTitle>
                   <CardDescription>Latest learning interactions</CardDescription>
                 </div>
-                <Button aschild variant="outline" size="sm">
+                <Button asChild variant="outline" size="sm">
                   <Link href={`/student/${student.id}/sessions`}>View All</Link>
                 </Button>
               </div>
@@ -277,12 +360,20 @@ export default function StudentDetail() {
 
         {/* Action Buttons */}
         <div className="mt-8 flex gap-4">
-          <Button aschild size="lg">
+          <Button asChild size="lg">
             <Link href={`/student/${student.id}/sessions`}>View All Sessions</Link>
           </Button>
           <Button variant="outline" size="lg">
             Generate Report
           </Button>
+          {assessmentStatus.currentSession && (
+            <div className="flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-200 rounded-lg">
+              <CheckCircle className="h-4 w-4 text-green-600" />
+              <span className="text-sm text-green-700">
+                Assessment started at {new Date(assessmentStatus.currentSession.startTime).toLocaleTimeString()}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>
