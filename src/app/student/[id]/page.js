@@ -120,7 +120,7 @@ export default function StudentDetail() {
         <div className="text-center">
           <h1 className="text-2xl font-bold text-slate-800 mb-2">Student Not Found</h1>
           <p className="text-slate-600 mb-4">The student with ID {params.id} could not be found.</p>
-          <Button asChild>
+          <Button aschild>
             <Link href="/">Return to Dashboard</Link>
           </Button>
         </div>
@@ -133,7 +133,7 @@ export default function StudentDetail() {
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <Button variant="ghost" asChild className="mb-4">
+          <Button variant="ghost" aschild className="mb-4">
             <Link href="/" className="flex items-center gap-2">
               <ArrowLeft className="h-4 w-4" />
               Back to Dashboard
@@ -239,7 +239,7 @@ export default function StudentDetail() {
                   <CardTitle className="text-xl font-semibold text-slate-800">Recent Sessions</CardTitle>
                   <CardDescription>Latest learning interactions</CardDescription>
                 </div>
-                <Button asChild variant="outline" size="sm">
+                <Button aschild variant="outline" size="sm">
                   <Link href={`/student/${student.id}/sessions`}>View All</Link>
                 </Button>
               </div>
@@ -277,7 +277,7 @@ export default function StudentDetail() {
 
         {/* Action Buttons */}
         <div className="mt-8 flex gap-4">
-          <Button asChild size="lg">
+          <Button aschild size="lg">
             <Link href={`/student/${student.id}/sessions`}>View All Sessions</Link>
           </Button>
           <Button variant="outline" size="lg">

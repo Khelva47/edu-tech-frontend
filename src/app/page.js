@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Search, Users, TrendingUp, BookOpen, Eye } from "lucide-react"
+import { Search, Users, TrendingUp, BookOpen, Eye, Plus } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -110,6 +110,12 @@ export default function Dashboard() {
           <h1 className="text-4xl font-bold text-slate-800 mb-2">Student Progress Dashboard</h1>
           <p className="text-slate-600 text-lg">Track learning progress for tactile board interactions</p>
         </div>
+        <Button aschild className="mt-2 bg-blue-600 hover:bg-blue-700">
+            <Link href="/create-student">
+              <Plus className="h-4 w-4 mr-2" />
+              Create Student
+            </Link>
+          </Button>
 
         {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -223,10 +229,10 @@ export default function Dashboard() {
 
                   {/* Action Buttons */}
                   <div className="flex gap-2 pt-2">
-                    <Button asChild size="sm" className="flex-1">
+                    <Button aschild size="sm" className="flex-1">
                       <Link href={`/student/${student.id}`}>View Details</Link>
                     </Button>
-                    <Button asChild variant="outline" size="sm" className="flex-1 bg-transparent">
+                    <Button aschild variant="outline" size="sm" className="flex-1 bg-transparent">
                       <Link href={`/student/${student.id}/sessions`}>Sessions</Link>
                     </Button>
                   </div>
