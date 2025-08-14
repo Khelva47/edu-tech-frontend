@@ -25,6 +25,7 @@ export default function CreateStudent() {
   })
 
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState("")
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -37,15 +38,30 @@ export default function CreateStudent() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setIsSubmitting(true)
+    setError("")
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    try {
+      const response = await fetch("/api/students", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      })
 
-    // In real implementation, this would be an API call
-    console.log("Creating student:", formData)
+      const result = await response.json()
 
-    // Redirect to dashboard after successful creation
-    router.push("/")
+      if (!result.success) {
+        throw new Error(result.error || "Failed to create student")
+      }
+
+      // Redirect to dashboard after successful creation
+      router.push("/")
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const generateStudentId = () => {
@@ -58,7 +74,7 @@ export default function CreateStudent() {
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         {/* Header */}
         <div className="mb-8 flex items-center gap-4">
-          <Button asChild variant="outline" size="sm">
+          <Button aschild variant="outline" size="sm">
             <Link href="/">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Dashboard
@@ -69,6 +85,12 @@ export default function CreateStudent() {
             <p className="text-slate-600 text-lg">Add a new student to the tactile learning program</p>
           </div>
         </div>
+
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-md">
+            <p className="text-red-600 text-sm">{error}</p>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-8">
           {/* Basic Information */}
@@ -108,7 +130,7 @@ export default function CreateStudent() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label htmlFor="studentId">Student ID</Label>
+                  <Label htmlFor="studentId">Student ID *</Label>
                   <div className="flex gap-2">
                     <Input
                       id="studentId"
@@ -116,6 +138,7 @@ export default function CreateStudent() {
                       value={formData.studentId}
                       onChange={handleInputChange}
                       placeholder="STU0001"
+                      required
                     />
                     <Button type="button" variant="outline" onClick={generateStudentId}>
                       Generate

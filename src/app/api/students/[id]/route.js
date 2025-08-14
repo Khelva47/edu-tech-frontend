@@ -1,51 +1,102 @@
 import { NextResponse } from "next/server"
-
-// Mock student data - replace with database queries
-const getStudentById = (id) => {
-  const students = {
-    STU001: {
-      id: "STU001",
-      name: "Emma Johnson",
-      registrationDate: "2024-01-15",
-      status: "excellent",
-      totalSessions: 45,
-      averageScore: 92,
-      lastSession: "2024-01-20",
-      shapesProgress: {
-        circle: { progress: 95, sessions: 12, accuracy: 94 },
-        square: { progress: 88, sessions: 11, accuracy: 89 },
-        triangle: { progress: 90, sessions: 12, accuracy: 91 },
-        rectangle: { progress: 85, sessions: 10, accuracy: 87 },
-      },
-      recentSessions: [
-        {
-          id: "SES001",
-          date: "2024-01-20",
-          shape: "circle",
-          questionsAsked: 5,
-          correctAnswers: 5,
-          accuracy: 100,
-          duration: "8 minutes",
-        },
-      ],
-    },
-  }
-  return students[id] || null
-}
+import { executeQuery } from "@/lib/db"
 
 export async function GET(request, { params }) {
   try {
-    const student = getStudentById(params.id)
+    // Get student basic info
+    const studentQuery = `
+      SELECT 
+        student_id as id,
+        CONCAT(first_name, ' ', last_name) as name,
+        first_name,
+        last_name,
+        DATE_FORMAT(created_at, '%Y-%m-%d') as registrationDate,
+        date_of_birth,
+        email,
+        phone,
+        emergency_contact,
+        emergency_phone,
+        medical_notes,
+        learning_goals,
+        CASE 
+          WHEN (SELECT AVG(assessment_score) FROM learning_sessions WHERE student_id = students.student_id) >= 90 THEN 'excellent'
+          WHEN (SELECT AVG(assessment_score) FROM learning_sessions WHERE student_id = students.student_id) >= 70 THEN 'active'
+          ELSE 'needs_attention'
+        END as status,
+        (SELECT COUNT(*) FROM learning_sessions WHERE student_id = students.student_id) as totalSessions,
+        COALESCE((SELECT AVG(assessment_score) FROM learning_sessions WHERE student_id = students.student_id), 0) as averageScore,
+        (SELECT MAX(session_date) FROM learning_sessions WHERE student_id = students.student_id) as lastSession
+      FROM students 
+      WHERE student_id = ?
+    `
 
-    if (!student) {
+    const students = await executeQuery(studentQuery, [params.id])
+
+    if (students.length === 0) {
       return NextResponse.json({ success: false, error: "Student not found" }, { status: 404 })
+    }
+
+    const student = students[0]
+
+    // Get shapes progress with detailed stats
+    const shapesQuery = `
+      SELECT 
+        shape_type,
+        COUNT(*) as sessions,
+        AVG(assessment_score) as progress,
+        AVG(CASE WHEN is_correct = 1 THEN 100 ELSE 0 END) as accuracy
+      FROM learning_sessions 
+      WHERE student_id = ? 
+      GROUP BY shape_type
+    `
+    const shapesData = await executeQuery(shapesQuery, [params.id])
+
+    const shapesProgress = {
+      circle: { progress: 0, sessions: 0, accuracy: 0 },
+      square: { progress: 0, sessions: 0, accuracy: 0 },
+      triangle: { progress: 0, sessions: 0, accuracy: 0 },
+      rectangle: { progress: 0, sessions: 0, accuracy: 0 },
+    }
+
+    shapesData.forEach((shape) => {
+      const shapeKey = shape.shape_type.toLowerCase()
+      shapesProgress[shapeKey] = {
+        progress: Math.round(shape.progress),
+        sessions: shape.sessions,
+        accuracy: Math.round(shape.accuracy),
+      }
+    })
+
+    // Get recent sessions
+    const sessionsQuery = `
+      SELECT 
+        id,
+        DATE_FORMAT(session_date, '%Y-%m-%d') as date,
+        shape_type as shape,
+        1 as questionsAsked,
+        CASE WHEN is_correct = 1 THEN 1 ELSE 0 END as correctAnswers,
+        CASE WHEN is_correct = 1 THEN 100 ELSE 0 END as accuracy,
+        '5 minutes' as duration
+      FROM learning_sessions 
+      WHERE student_id = ? 
+      ORDER BY session_date DESC 
+      LIMIT 10
+    `
+    const recentSessions = await executeQuery(sessionsQuery, [params.id])
+
+    const studentData = {
+      ...student,
+      averageScore: Math.round(student.averageScore),
+      shapesProgress,
+      recentSessions,
     }
 
     return NextResponse.json({
       success: true,
-      data: student,
+      data: studentData,
     })
   } catch (error) {
+    console.error("Database error:", error)
     return NextResponse.json({ success: false, error: "Failed to fetch student" }, { status: 500 })
   }
 }
@@ -53,20 +104,51 @@ export async function GET(request, { params }) {
 export async function PUT(request, { params }) {
   try {
     const body = await request.json()
-    const student = getStudentById(params.id)
 
-    if (!student) {
+    // Check if student exists
+    const existingStudent = await executeQuery("SELECT student_id FROM students WHERE student_id = ?", [params.id])
+
+    if (existingStudent.length === 0) {
       return NextResponse.json({ success: false, error: "Student not found" }, { status: 404 })
     }
 
-    // Update student data (mock implementation)
-    const updatedStudent = { ...student, ...body }
+    // Update student data
+    const updateQuery = `
+      UPDATE students SET 
+        first_name = COALESCE(?, first_name),
+        last_name = COALESCE(?, last_name),
+        date_of_birth = COALESCE(?, date_of_birth),
+        email = COALESCE(?, email),
+        phone = COALESCE(?, phone),
+        emergency_contact = COALESCE(?, emergency_contact),
+        emergency_phone = COALESCE(?, emergency_phone),
+        medical_notes = COALESCE(?, medical_notes),
+        learning_goals = COALESCE(?, learning_goals),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE student_id = ?
+    `
+
+    const values = [
+      body.firstName,
+      body.lastName,
+      body.dateOfBirth,
+      body.email,
+      body.phone,
+      body.emergencyContact,
+      body.emergencyPhone,
+      body.medicalNotes,
+      body.learningGoals,
+      params.id,
+    ]
+
+    await executeQuery(updateQuery, values)
 
     return NextResponse.json({
       success: true,
-      data: updatedStudent,
+      message: "Student updated successfully",
     })
   } catch (error) {
+    console.error("Database error:", error)
     return NextResponse.json({ success: false, error: "Failed to update student" }, { status: 500 })
   }
 }
