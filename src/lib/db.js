@@ -10,9 +10,7 @@ const dbConfig = {
     rejectUnauthorized: false,
   },
   connectionLimit: 2,
-  acquireTimeout: 60000,
   queueLimit: 0,
-  reconnect: true,
   idleTimeout: 30000,
   maxIdle: 1,
 }

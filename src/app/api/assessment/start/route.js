@@ -6,11 +6,14 @@ export async function POST(request) {
     const today = new Date().toISOString().split("T")[0]
 
     // Check if student was already assessed today
-    const [existingAssessment] = await executeQuerySafe(
-      `SELECT id FROM learning_sessions 
-       WHERE student_id = ? AND DATE(created_at) = ?`,
+    const existingAssessmentResult = await executeQuerySafe(
+      `SELECT id FROM assessment_sessions 
+       WHERE student_id = ? AND DATE(timestamp) = ?`,
       [studentId, today],
     )
+
+    // Handle case where query result might be undefined
+    const existingAssessment = existingAssessmentResult || []
 
     if (existingAssessment.length > 0) {
       return Response.json(
@@ -22,11 +25,14 @@ export async function POST(request) {
     }
 
     // Check if there's already an active session
-    const [activeSession] = await executeQuerySafe(
+    const activeSessionResult = await executeQuerySafe(
       `SELECT id FROM assessment_sessions 
        WHERE student_id = ? AND status = 'active'`,
       [studentId],
     )
+
+    // Handle case where query result might be undefined
+    const activeSession = activeSessionResult || []
 
     if (activeSession.length > 0) {
       return Response.json(
@@ -38,14 +44,19 @@ export async function POST(request) {
     }
 
     // Create new assessment session
-    const [result] = await executeQuerySafe(
-      `INSERT INTO assessment_sessions (student_id, start_time, status) 
+    const insertResult = await executeQuerySafe(
+      `INSERT INTO assessment_sessions (student_id, timestamp, status) 
        VALUES (?, NOW(), 'active')`,
       [studentId],
     )
 
+    // Handle case where insert result might be undefined
+    if (!insertResult || !insertResult.insertId) {
+      throw new Error("Failed to create assessment session")
+    }
+
     return Response.json({
-      sessionId: result.insertId,
+      sessionId: insertResult.insertId,
       studentId: studentId,
       startTime: new Date().toISOString(),
       status: "active",

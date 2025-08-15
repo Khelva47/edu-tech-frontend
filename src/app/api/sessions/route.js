@@ -6,66 +6,86 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url)
     const studentId = searchParams.get("studentId")
     const shape = searchParams.get("shape")
-    const limit = Number.parseInt(searchParams.get("limit")) || 50
+    const limit = Math.max(1, Math.min(100, Number.parseInt(searchParams.get("limit")) || 50))
 
     let query = `
       SELECT 
-        ls.id,
-        ls.student_id,
-        ls.shape,
-        ls.explanation,
-        ls.timestamp,
-        s.first_name,
-        s.last_name
-      FROM learning_sessions ls
-      LEFT JOIN students s ON ls.student_id = s.student_id
+        id,
+        student_id,
+        shape,
+        explanation,
+        timestamp
+      FROM learning_sessions
       WHERE 1=1
     `
 
     const params = []
 
     if (studentId) {
-      query += " AND ls.student_id = ?"
+      query += " AND student_id = ?"
       params.push(studentId)
     }
 
     if (shape) {
-      query += " AND ls.shape = ?"
+      query += " AND shape = ?"
       params.push(shape)
     }
 
-    query += " ORDER BY ls.timestamp DESC LIMIT ?"
+    query += ` 
+      ORDER BY timestamp DESC 
+      LIMIT ?
+    `
     params.push(limit)
+
+    console.log("[v0] Executing query with params:", { query: query.trim(), params })
 
     const sessions = await executeQuerySafe(query, params)
 
     const formattedSessions = await Promise.all(
       sessions.map(async (session) => {
-        // Get assessment data for this session's date
-        const assessmentQuery = `
-        SELECT 
-          COUNT(*) as total_questions,
-          SUM(CASE WHEN assessment = 'Correct' THEN 1 ELSE 0 END) as correct_answers
-        FROM assessment_sessions 
-        WHERE student_id = ? AND DATE(timestamp) = DATE(?)
-      `
+        let studentName = "Unknown Student"
+        let questionsAsked = 0
+        let correctAnswers = 0
 
-        const assessmentData = await executeQuerySafe(assessmentQuery, [session.student_id, session.timestamp])
-        const assessment = assessmentData[0] || { total_questions: 0, correct_answers: 0 }
+        try {
+          // Get student name separately
+          const studentData = await executeQuerySafe(
+            "SELECT first_name, last_name FROM students WHERE student_id = ?",
+            [session.student_id],
+          )
+
+          if (studentData && studentData[0]) {
+            studentName = `${studentData[0].first_name || ""} ${studentData[0].last_name || ""}`.trim()
+          }
+
+          // Get assessment data for this session's date
+          const assessments = await executeQuerySafe(
+            `SELECT COUNT(*) as total, 
+           SUM(CASE WHEN assessment = 'Correct' THEN 1 ELSE 0 END) as correct
+           FROM assessment_sessions 
+           WHERE student_id = ? AND DATE(timestamp) = DATE(?)`,
+            [session.student_id, session.timestamp],
+          )
+
+          if (assessments && assessments[0]) {
+            questionsAsked = Number(assessments[0].total) || 0
+            correctAnswers = Number(assessments[0].correct) || 0
+          }
+        } catch (error) {
+          console.error("[v0] Error fetching additional data:", error)
+          // Continue with default values
+        }
 
         return {
           id: session.id,
           studentId: session.student_id,
-          studentName: `${session.first_name} ${session.last_name}`,
+          studentName,
           date: session.timestamp,
           shape: session.shape,
           explanation: session.explanation,
-          questionsAsked: Number(assessment.total_questions) || 0,
-          correctAnswers: Number(assessment.correct_answers) || 0,
-          accuracy:
-            assessment.total_questions > 0
-              ? Math.round((assessment.correct_answers / assessment.total_questions) * 100)
-              : 0,
+          questionsAsked,
+          correctAnswers,
+          accuracy: questionsAsked > 0 ? Math.round((correctAnswers / questionsAsked) * 100) : 0,
         }
       }),
     )
@@ -90,7 +110,6 @@ export async function POST(request) {
       return NextResponse.json({ success: false, error: "Missing required session data" }, { status: 400 })
     }
 
-    // Insert learning session
     const result = await executeQuerySafe(
       "INSERT INTO learning_sessions (student_id, shape, explanation) VALUES (?, ?, ?)",
       [studentId, shape, explanation],
