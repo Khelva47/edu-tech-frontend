@@ -9,32 +9,48 @@ const dbConfig = {
   ssl: {
     rejectUnauthorized: false,
   },
-  connectionLimit: 10,
+  connectionLimit: 2,
   acquireTimeout: 60000,
-  timeout: 60000,
+  queueLimit: 0,
+  reconnect: true,
+  idleTimeout: 30000,
+  maxIdle: 1,
 }
 
-let pool
+let pool = null
 
 export async function getConnection() {
   if (!pool) {
     pool = mysql.createPool(dbConfig)
+
+    pool.on("connection", (connection) => {
+      console.log("[v0] New connection established as id " + connection.threadId)
+    })
+
+    pool.on("error", (err) => {
+      console.error("[v0] Database pool error:", err)
+      if (err.code === "PROTOCOL_CONNECTION_LOST") {
+        pool = null
+      }
+    })
   }
   return pool
 }
 
 export async function executeQuery(query, params = []) {
   try {
-    const connection = await getConnection()
-    const [results] = await connection.execute(query, params)
+    const pool = await getConnection()
+    const [results] = await pool.execute(query, params)
     return results
   } catch (error) {
     console.error("Database query error:", error)
+    if (error.code === "ER_TOO_MANY_USER_CONNECTIONS" || error.code === "PROTOCOL_CONNECTION_LOST") {
+      pool = null
+    }
     throw error
   }
 }
 
-// Initialize database tables to match Python script exactly
 export async function initializeDatabase() {
   const createStudentsTable = `
     CREATE TABLE IF NOT EXISTS students (
@@ -54,28 +70,28 @@ export async function initializeDatabase() {
     )
   `
 
-  // Match Python script schema exactly
   const createLearningSessionsTable = `
     CREATE TABLE IF NOT EXISTS learning_sessions (
       id INT AUTO_INCREMENT PRIMARY KEY,
-      student_id TEXT,
+      student_id VARCHAR(20),
       shape TEXT,
       explanation TEXT,
       timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
+      INDEX idx_student_id (student_id),
+      INDEX idx_timestamp (timestamp)
     )
   `
 
-  // Match Python script schema exactly
   const createAssessmentSessionsTable = `
     CREATE TABLE IF NOT EXISTS assessment_sessions (
       id INT AUTO_INCREMENT PRIMARY KEY,
-      student_id TEXT,
+      student_id VARCHAR(20),
       question TEXT,
       answer TEXT,
       assessment TEXT,
       timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
+      INDEX idx_student_id (student_id),
+      INDEX idx_timestamp (timestamp)
     )
   `
 
@@ -91,21 +107,17 @@ export async function initializeDatabase() {
 
 export async function checkTablesExist() {
   try {
-    const connection = await getConnection()
-
-    // Check if students table exists
-    const [studentsTable] = await connection.execute(
+    const studentsTable = await executeQuery(
       "SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = ? AND table_name = 'students'",
       [process.env.MYSQL_DATABASE],
     )
 
-    // Check if learning_sessions table exists
-    const [sessionsTable] = await connection.execute(
+    const sessionsTable = await executeQuery(
       "SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = ? AND table_name = 'learning_sessions'",
       [process.env.MYSQL_DATABASE],
     )
 
-    const [assessmentTable] = await connection.execute(
+    const assessmentTable = await executeQuery(
       "SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = ? AND table_name = 'assessment_sessions'",
       [process.env.MYSQL_DATABASE],
     )
@@ -138,17 +150,13 @@ export async function ensureTablesExist() {
   }
 }
 
-// Enhanced executeQuery with automatic table creation
 export async function executeQuerySafe(query, params = []) {
   try {
-    // First try to execute the query
     return await executeQuery(query, params)
   } catch (error) {
-    // If table doesn't exist, try to create tables and retry
     if (error.code === "ER_NO_SUCH_TABLE") {
       console.log("Table doesn't exist, creating tables...")
       await ensureTablesExist()
-      // Retry the query
       return await executeQuery(query, params)
     }
     throw error

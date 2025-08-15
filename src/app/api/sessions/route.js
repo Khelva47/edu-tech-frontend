@@ -16,13 +16,9 @@ export async function GET(request) {
         ls.explanation,
         ls.timestamp,
         s.first_name,
-        s.last_name,
-        COUNT(ass.id) as total_questions,
-        SUM(CASE WHEN ass.assessment = 'Correct' THEN 1 ELSE 0 END) as correct_answers
+        s.last_name
       FROM learning_sessions ls
       LEFT JOIN students s ON ls.student_id = s.student_id
-      LEFT JOIN assessment_sessions ass ON ls.student_id = ass.student_id 
-        AND DATE(ls.timestamp) = DATE(ass.timestamp)
       WHERE 1=1
     `
 
@@ -38,23 +34,41 @@ export async function GET(request) {
       params.push(shape)
     }
 
-    query += " GROUP BY ls.id ORDER BY ls.timestamp DESC LIMIT ?"
+    query += " ORDER BY ls.timestamp DESC LIMIT ?"
     params.push(limit)
 
     const sessions = await executeQuerySafe(query, params)
 
-    // Format sessions to match expected structure
-    const formattedSessions = sessions.map((session) => ({
-      id: session.id,
-      studentId: session.student_id,
-      studentName: `${session.first_name} ${session.last_name}`,
-      date: session.timestamp,
-      shape: session.shape,
-      explanation: session.explanation,
-      questionsAsked: session.total_questions || 0,
-      correctAnswers: session.correct_answers || 0,
-      accuracy: session.total_questions > 0 ? Math.round((session.correct_answers / session.total_questions) * 100) : 0,
-    }))
+    const formattedSessions = await Promise.all(
+      sessions.map(async (session) => {
+        // Get assessment data for this session's date
+        const assessmentQuery = `
+        SELECT 
+          COUNT(*) as total_questions,
+          SUM(CASE WHEN assessment = 'Correct' THEN 1 ELSE 0 END) as correct_answers
+        FROM assessment_sessions 
+        WHERE student_id = ? AND DATE(timestamp) = DATE(?)
+      `
+
+        const assessmentData = await executeQuerySafe(assessmentQuery, [session.student_id, session.timestamp])
+        const assessment = assessmentData[0] || { total_questions: 0, correct_answers: 0 }
+
+        return {
+          id: session.id,
+          studentId: session.student_id,
+          studentName: `${session.first_name} ${session.last_name}`,
+          date: session.timestamp,
+          shape: session.shape,
+          explanation: session.explanation,
+          questionsAsked: Number(assessment.total_questions) || 0,
+          correctAnswers: Number(assessment.correct_answers) || 0,
+          accuracy:
+            assessment.total_questions > 0
+              ? Math.round((assessment.correct_answers / assessment.total_questions) * 100)
+              : 0,
+        }
+      }),
+    )
 
     return NextResponse.json({
       success: true,

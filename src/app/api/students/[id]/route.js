@@ -3,6 +3,9 @@ import { executeQuerySafe } from "@/lib/db"
 
 export async function GET(request, { params }) {
   try {
+    const resolvedParams = await params
+    const studentId = resolvedParams.id
+
     // Get student basic info
     const studentQuery = `
       SELECT 
@@ -19,19 +22,14 @@ export async function GET(request, { params }) {
         date_of_birth,
         created_at,
         updated_at,
-        CASE 
-          WHEN (SELECT AVG(assessment_score) FROM learning_sessions WHERE student_id = students.student_id) >= 90 THEN 'excellent'
-          WHEN (SELECT AVG(assessment_score) FROM learning_sessions WHERE student_id = students.student_id) >= 70 THEN 'active'
-          ELSE 'needs_attention'
-        END as status,
         (SELECT COUNT(*) FROM learning_sessions WHERE student_id = students.student_id) as total_sessions,
-        COALESCE((SELECT AVG(assessment_score) FROM learning_sessions WHERE student_id = students.student_id), 0) as average_score,
-        (SELECT MAX(session_date) FROM learning_sessions WHERE student_id = students.student_id) as last_session_date
+        (SELECT COUNT(*) FROM assessment_sessions WHERE student_id = students.student_id) as total_assessments,
+        (SELECT MAX(timestamp) FROM learning_sessions WHERE student_id = students.student_id) as last_session_date
       FROM students 
       WHERE student_id = ?
     `
 
-    const students = await executeQuerySafe(studentQuery, [params.id])
+    const students = await executeQuerySafe(studentQuery, [studentId])
 
     if (students.length === 0) {
       return NextResponse.json({ success: false, error: "Student not found" }, { status: 404 })
@@ -39,35 +37,58 @@ export async function GET(request, { params }) {
 
     const student = students[0]
 
-    // Get recent sessions with detailed information
-    const sessionsQuery = `
+    const learningSessionsQuery = `
       SELECT 
         id,
         student_id,
-        shape_type,
-        question,
-        student_answer,
-        correct_answer,
-        is_correct,
-        assessment_score,
-        ai_feedback,
-        session_date,
-        created_at
+        shape,
+        explanation,
+        timestamp
       FROM learning_sessions 
       WHERE student_id = ? 
-      ORDER BY session_date DESC, created_at DESC
-      LIMIT 20
+      ORDER BY timestamp DESC
+      LIMIT 10
     `
-    const sessions = await executeQuerySafe(sessionsQuery, [params.id])
+    const learningSessions = await executeQuerySafe(learningSessionsQuery, [studentId])
+
+    const assessmentSessionsQuery = `
+      SELECT 
+        id,
+        student_id,
+        question,
+        answer,
+        assessment,
+        timestamp
+      FROM assessment_sessions 
+      WHERE student_id = ? 
+      ORDER BY timestamp DESC
+      LIMIT 10
+    `
+    const assessmentSessions = await executeQuerySafe(assessmentSessionsQuery, [studentId])
+
+    const avgScoreQuery = `
+      SELECT AVG(CASE WHEN assessment = 'Correct' THEN 100 ELSE 0 END) as avg_score
+      FROM assessment_sessions 
+      WHERE student_id = ?
+    `
+    const [avgResult] = await executeQuerySafe(avgScoreQuery, [studentId])
+    const averageScore = Math.round(avgResult?.avg_score || 0)
+
+    let status = "needs_attention"
+    if (averageScore >= 90) status = "excellent"
+    else if (averageScore >= 70) status = "active"
 
     return NextResponse.json({
       success: true,
       student: {
         ...student,
-        average_score: Math.round(student.average_score || 0),
+        status,
+        average_score: averageScore,
         total_sessions: student.total_sessions || 0,
+        total_assessments: student.total_assessments || 0,
       },
-      sessions: sessions || [],
+      learningSessions: learningSessions || [],
+      assessmentSessions: assessmentSessions || [],
     })
   } catch (error) {
     console.error("Database error:", error)
@@ -77,10 +98,12 @@ export async function GET(request, { params }) {
 
 export async function PUT(request, { params }) {
   try {
+    const resolvedParams = await params
+    const studentId = resolvedParams.id
     const body = await request.json()
 
     // Check if student exists
-    const existingStudent = await executeQuerySafe("SELECT student_id FROM students WHERE student_id = ?", [params.id])
+    const existingStudent = await executeQuerySafe("SELECT student_id FROM students WHERE student_id = ?", [studentId])
 
     if (existingStudent.length === 0) {
       return NextResponse.json({ success: false, error: "Student not found" }, { status: 404 })
@@ -112,7 +135,7 @@ export async function PUT(request, { params }) {
       body.emergencyPhone,
       body.medicalNotes,
       body.learningGoals,
-      params.id,
+      studentId,
     ]
 
     await executeQuerySafe(updateQuery, values)
