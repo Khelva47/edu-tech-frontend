@@ -6,13 +6,10 @@ export async function POST(request) {
     const today = new Date().toISOString().split("T")[0]
 
     // Check if student was already assessed today
-    const existingAssessmentResult = await executeQuerySafe(
-      `SELECT id FROM assessment_sessions 
-       WHERE student_id = ? AND DATE(timestamp) = ?`,
-      [studentId, today],
-    )
+    const existingAssessmentQuery = `SELECT id FROM learning_sessions 
+       WHERE student_id = '${studentId}' AND DATE(timestamp) = '${today}' AND assessment_score IS NOT NULL`
 
-    // Handle case where query result might be undefined
+    const existingAssessmentResult = await executeQuerySafe(existingAssessmentQuery)
     const existingAssessment = existingAssessmentResult || []
 
     if (existingAssessment.length > 0) {
@@ -24,14 +21,11 @@ export async function POST(request) {
       )
     }
 
-    // Check if there's already an active session
     const activeSessionResult = await executeQuerySafe(
-      `SELECT id FROM assessment_sessions 
-       WHERE student_id = ? AND status = 'active'`,
-      [studentId],
+      `SELECT session_id FROM active_sessions 
+       WHERE student_id = '${studentId}' AND is_active = TRUE`,
     )
 
-    // Handle case where query result might be undefined
     const activeSession = activeSessionResult || []
 
     if (activeSession.length > 0) {
@@ -43,20 +37,10 @@ export async function POST(request) {
       )
     }
 
-    // Create new assessment session
-    const insertResult = await executeQuerySafe(
-      `INSERT INTO assessment_sessions (student_id, timestamp, status) 
-       VALUES (?, NOW(), 'active')`,
-      [studentId],
-    )
-
-    // Handle case where insert result might be undefined
-    if (!insertResult || !insertResult.insertId) {
-      throw new Error("Failed to create assessment session")
-    }
+    const insertQuery = `INSERT INTO active_sessions (student_id, is_active, timestamp) VALUES ('${studentId}', TRUE, NOW())`
+    await executeQuerySafe(insertQuery)
 
     return Response.json({
-      sessionId: insertResult.insertId,
       studentId: studentId,
       startTime: new Date().toISOString(),
       status: "active",

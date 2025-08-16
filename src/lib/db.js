@@ -93,10 +93,22 @@ export async function initializeDatabase() {
     )
   `
 
+  const createActiveSessionsTable = `
+    CREATE TABLE IF NOT EXISTS active_sessions (
+      session_id INT AUTO_INCREMENT PRIMARY KEY,
+      student_id VARCHAR(20),
+      is_active BOOLEAN DEFAULT TRUE,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_student_id (student_id),
+      INDEX idx_is_active (is_active)
+    )
+  `
+
   try {
     await executeQuery(createStudentsTable)
     await executeQuery(createLearningSessionsTable)
     await executeQuery(createAssessmentSessionsTable)
+    await executeQuery(createActiveSessionsTable)
     console.log("Database tables initialized successfully")
   } catch (error) {
     console.error("Error initializing database:", error)
@@ -120,22 +132,28 @@ export async function checkTablesExist() {
       [process.env.MYSQL_DATABASE],
     )
 
+    const activeSessionsTable = await executeQuery(
+      "SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = ? AND table_name = 'active_sessions'",
+      [process.env.MYSQL_DATABASE],
+    )
+
     return {
       studentsExists: studentsTable[0].count > 0,
       sessionsExists: sessionsTable[0].count > 0,
       assessmentExists: assessmentTable[0].count > 0,
+      activeSessionsExists: activeSessionsTable[0].count > 0,
     }
   } catch (error) {
     console.error("Error checking table existence:", error)
-    return { studentsExists: false, sessionsExists: false, assessmentExists: false }
+    return { studentsExists: false, sessionsExists: false, assessmentExists: false, activeSessionsExists: false }
   }
 }
 
 export async function ensureTablesExist() {
   try {
-    const { studentsExists, sessionsExists, assessmentExists } = await checkTablesExist()
+    const { studentsExists, sessionsExists, assessmentExists, activeSessionsExists } = await checkTablesExist()
 
-    if (!studentsExists || !sessionsExists || !assessmentExists) {
+    if (!studentsExists || !sessionsExists || !assessmentExists || !activeSessionsExists) {
       console.log("Tables missing, initializing database...")
       await initializeDatabase()
       return true

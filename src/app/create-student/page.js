@@ -74,7 +74,7 @@ export default function CreateStudent() {
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         {/* Header */}
         <div className="mb-8 flex items-center gap-4">
-          <Button aschild variant="outline" size="sm">
+          <Button aschild="true" variant="outline" size="sm">
             <Link href="/">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Dashboard
@@ -258,7 +258,7 @@ export default function CreateStudent() {
 
           {/* Action Buttons */}
           <div className="flex justify-end gap-4 pt-6">
-            <Button type="button" variant="outline" asChild>
+            <Button type="button" variant="outline" aschild>
               <Link href="/">Cancel</Link>
             </Button>
             <Button type="submit" disabled={isSubmitting} className="bg-blue-600 hover:bg-blue-700">
